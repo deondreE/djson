@@ -314,35 +314,30 @@ const Parser = struct {
             const item = try p.parseItem();
             try p.expectItemEnd(close);
 
+            if (item == .keyed and items.items.len > 0) return p.fail(item_pos, "mixed keyed and bare entries");
+            if (item == .bare and entries.items.len > 0) return p.fail(item_pos, "mixed keyed and bare entries");
+            if (item == .keyed and forced_array) return p.fail(item_pos, "keyed entry in array");
+
+            try p.expectItemEnd(close);
+
             switch (item) {
                 .keyed => |e| {
-                    // if (forced_array) return p.fail(item_pos, "arrays cannot contain `key = value` entries");
-                    // if (items.items.len > 0) return p.fail(item_pos, "cannot mix keyed and bare entries");
                     const gop = try keys.getOrPut(p.arena, e.key);
                     if (gop.found_existing) return p.fail(item_pos, "duplicate key: ");
                     try entries.append(p.arena, e);
                 },
                 .bare => |v| {
-                    // if (entries.items.len > 0) return p.fail(item_pos, "expected `key = value` entry, found a bare value");
                     try items.append(p.arena, v);
                 },
             }
         }
-        _ = forced_array;
 
-        // If there are ONLY items, it's an array.
-        // If there are ANY entries, it's an object.
-        // We can store bare items in a special hidden field if we want to preserve them.
-        if (entries.items.len > 0) {
-            if (items.items.len > 0) {
-                try entries.append(p.arena, .{
-                    .key = "$items",
-                    .value = .{ .array = try items.toOwnedSlice(p.arena) },
-                });
-            }
-            return .{ .object = try entries.toOwnedSlice(p.arena) };
-        }
-        return .{ .array = try items.toOwnedSlice(p.arena) };
+        if (forced_array) return .{ .array = try items.toOwnedSlice(p.arena) };
+        if (entries.items.len > 0) return .{ .object = try entries.toOwnedSlice(p.arena) };
+        if (items.items.len > 0) return .{ .array = try items.toOwnedSlice(p.arena) };
+
+        // Default for {} or empty implicit root is an object
+        return .{ .object = try entries.toOwnedSlice(p.arena) };
     }
 
     fn parseItem(p: *Parser) Error!Item {
