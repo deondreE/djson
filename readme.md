@@ -7,7 +7,7 @@
 - [ ] More number forms: hex/binary/octal literals, `_` separators, `u64` range
 - [ ] Lone scalar documents (today `42` parses as `[42]`)
 - [ ] Decide the duplicate-key policy: error (current), last-wins, or merge
-- [ ] Write the formal grammar (EBNF) and a short spec document
+- [x] Write the formal grammar (EBNF) and a short spec document
 
 ### Parser
 - [ ] Source spans (line, column) on every `Value`, so consumers can report their own errors

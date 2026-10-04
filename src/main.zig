@@ -23,7 +23,7 @@ const version = "0.1.0";
 
 const Options = struct {
     path: ?[]const u8 = null,
-    format: Format = .djson,
+    format: Format = .json,
     compact: bool = false,
     indent: ?u8 = null,
     check: bool = false,

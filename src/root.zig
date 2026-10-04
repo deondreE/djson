@@ -17,6 +17,7 @@ pub const Value = union(enum) {
         key: []const u8,
         value: Value,
     };
+
     /// Looks upo a key in an object. Returns null for non-objects or missing keys.
     pub fn get(self: Value, key: []const u8) ?Value {
         if (self != .object) return null;
