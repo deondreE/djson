@@ -21,6 +21,31 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(exe);
 
+    const wasmTarget = b.resolveTargetQuery(.{
+        .cpu_arch = .wasm32,
+        .os_tag = .freestanding,
+    });
+
+    const wasm_lib = b.addExecutable(.{
+        .name = "djson",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/capi.zig"),
+            .target = wasmTarget,
+            .optimize = .ReleaseSmall,
+            .imports = &.{
+                .{ .name = "djson", .module = mod },
+            },
+        }),
+    });
+    wasm_lib.rdynamic = true;
+    wasm_lib.entry = .disabled;
+
+    const install_wasm = b.addInstallArtifact(wasm_lib, .{
+        .dest_dir = .{ .override = .{ .custom = "../djson-ts/src" } },
+    });
+    const wasm_step = b.step("wasm", "Build the WASM library");
+    wasm_step.dependOn(&install_wasm.step);
+
     const run_step = b.step("run", "Run the app");
 
     const run_cmd = b.addRunArtifact(exe);

@@ -1,2 +1,8 @@
 zig-out
 .zig-cache
+
+node_modules
+dist
+*.wasm
+*.d.ts
+*.js
