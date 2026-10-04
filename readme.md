@@ -23,12 +23,12 @@
 - [ ] Streaming writer API that doesn't need a full `Value` tree (MAYBE)
 
 ### Zig library API
-- [ ] `parseInto(T, ...)` to map straight onto Zig structs, enums and slices (like `std.json.parseFromSlice`)
-- [ ] `stringify(anytype, ...)` to serialize Zig values directly
-- [ ] Path lookup helper: `value.getPath("server.ports[0]")`
-- [ ] Iterators and typed getters (`getInt`, `getString`, `getBool`)
-- [ ] Publish as a fetchable package (`zig fetch --save`) with tagged releases
-- [ ] C ABI static/shared library and a WASM build
+- [x] `parseInto(T, ...)` to map straight onto Zig structs, enums and slices (like `std.json.parseFromSlice`)
+- [x] `stringify(anytype, ...)` to serialize Zig values directly
+- [x] Path lookup helper: `value.getPath("server.ports[0]")`
+- [x] Iterators and typed getters (`getInt`, `getString`, `getBool`)
+- [x] Publish as a fetchable package (`zig fetch --save`) with tagged releases
+- [x] C ABI static/shared library and a WASM build
 
 ### Tooling
 - [ ] Syntax highlighting: VS Code (TextMate) grammar, tree-sitter grammar

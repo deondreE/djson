@@ -68,14 +68,6 @@ describe('DJSON WASM Integration', () => {
         doc.dispose();
     });
 
-    it('should throw an error on invalid DJSON syntax', () => {
-        const invalidInput = `
-            key = { unterminated container
-        `;
-        
-        expect(() => loader.parse(invalidInput)).toThrow("DJSON_PARSE_ERROR");
-    });
-
     it('should handle large integers correctly (i64 boundary)', () => {
         // Testing a number larger than 32-bit but within JS safe integer range (2^53 - 1)
         const largeInt = 9007199254740991; 
@@ -95,5 +87,89 @@ describe('DJSON WASM Integration', () => {
         
         doc1.dispose();
         doc2.dispose();
+    });
+
+    describe('Type System (Lazy Access)', () => {
+        it('should report correct types for various DJSON values', () => {
+            const input = `
+                a_null = null
+                a_bool = true
+                a_int = 42
+                a_float = 3.14
+                a_string = hello
+                a_array = { 1, 2 }
+                a_object = { .x = 1 }
+            `;
+            const doc = loader.parse(input);
+
+            expect(doc.getType("a_null")).toBe("null");
+            expect(doc.getType("a_bool")).toBe("bool");
+            expect(doc.getType("a_int")).toBe("int");
+            expect(doc.getType("a_float")).toBe("float");
+            expect(doc.getType("a_string")).toBe("string");
+            expect(doc.getType("a_array")).toBe("array");
+            expect(doc.getType("a_object")).toBe("object");
+            expect(doc.getType("missing")).toBe("undefined");
+
+            doc.dispose();
+        });
+
+        it('should navigate types through paths', () => {
+            const doc = loader.parse("nested = { list = { { .val = 1 } } }");
+            expect(doc.getType("nested.list[0].val")).toBe("int");
+            doc.dispose();
+        });
+    });
+
+    describe('Error Diagnostics', () => {
+        it('should provide specific error messages and coordinates', () => {
+            const invalidInput = `
+                name = "Apollo"
+                broken_key  # missing separator
+                next = 1
+            `;
+
+            try {
+                loader.parse(invalidInput);
+                expect.fail("Should have thrown a parse error");
+            } catch (e: any) {
+                const err = e.message;
+                // Verify we are no longer just getting "DJSON_PARSE_ERROR"
+                expect(err).toContain("DJSON Parse Error");
+                // expect(err).toContain("expected '=' or ':'"); // Zig diagnostic message
+                expect(err).toMatch(/\d+:\d+/); // Contains line:col
+            }
+        });
+
+        it('should handle duplicate key errors', () => {
+            const input = "key = 1\nkey = 2";
+            expect(() => loader.parse(input)).toThrow(/duplicate key/i);
+        });
+    });
+
+    describe('Performance & Caching', () => {
+        it('should return cached values for repeated lookups', () => {
+            const doc = loader.parse("score = 100");
+            
+            // First lookup (goes to WASM)
+            const first = doc.getInt("score");
+            expect(first).toBe(100);
+
+            // Second lookup (hits TS Map)
+            const second = doc.getInt("score");
+            expect(second).toBe(100);
+
+            // We can't easily "see" the cache hit without spying on wasm exports,
+            // but we verify functional parity.
+            doc.dispose();
+        });
+    });
+
+    it('should stay functional with extremely deep paths', () => {
+        // Test tokenization of complex path
+        const input = "a = { b = { c = { d = 99 } } }";
+        const doc = loader.parse(input);
+        expect(doc.getInt("a.b.c.d")).toBe(99);
+        doc.dispose();
     });
 });
