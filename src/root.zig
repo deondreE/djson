@@ -51,6 +51,37 @@ pub const Value = union(enum) {
             },
         };
     }
+
+    /// Path lookup supporting "key.subkey[0].leaf"
+    pub fn getPath(self: Value, path: []const u8) ?Value {
+        var it = std.mem.tokenizeAny(u8, path, ".[ ]");
+        var current = self;
+        while (it.next()) |segment| {
+            switch (current) {
+                .object => current = current.get(segment) orelse return null,
+                .array => |arr| {
+                    const index = std.fmt.parseInt(usize, segment, 10) catch return null;
+                    if (index >= arr.len) return null;
+                    current = arr[index];
+                },
+                else => return null,
+            }
+        }
+        return current;
+    }
+
+    pub fn asInt(self: Value) ?i64 {
+        return if (self == .int) self.int else null;
+    }
+    pub fn asFloat(self: Value) ?f64 {
+        return if (self == .float) self.float else null;
+    }
+    pub fn asBool(self: Value) ?bool {
+        return if (self == .bool) self.bool else null;
+    }
+    pub fn asString(self: Value) ?[]const u8 {
+        return if (self == .string) self.string else null;
+    }
 };
 
 /// Where and why parsing failed. `line` and `column` are 1-based.
@@ -85,6 +116,63 @@ pub fn parse(gpa: Allocator, source: []const u8, diag: ?*Diagnostic) ParseError!
     };
     const root = try p.parseDocument();
     return .{ .arena = arena, .root = root };
+}
+
+/// This maps DJSON directly to Zig structs. It handles slices and optional values.
+pub fn parseInto(comptime T: type, gpa: Allocator, source: []const u8) !std.json.Parsed(T) {
+    var doc = try parse(gpa, source, null);
+    defer doc.deinit();
+
+    var arena = try gpa.create(std.heap.ArenaAllocator);
+    arena.* = std.heap.ArenaAllocator.init(gpa);
+    errdefer {
+        arena.deinit();
+        gpa.destroy(arena);
+    }
+
+    const val = try bindValue(T, arena.allocator(), doc.root);
+    return .{ .arena = arena.*, .value = val };
+}
+
+fn bindValue(comptime T: type, alloc: Allocator, v: Value) !T {
+    const TInfo = @typeInfo(T);
+    switch (TInfo) {
+        .Int => return @intCast(try v.asInt() orelse return error.TypeMismatch),
+        .Float => return @floatCast(try v.asFloat() orelse try v.asInt() orelse error.TypeMismatch),
+        .Bool => return try v.asBool() orelse error.TypeMismatch,
+        .Optional => |opt| {
+            if (v == .null) return null;
+            return try bindValue(opt.child, alloc, v);
+        },
+        .Pointer => |ptr| {
+            if (ptr.size == .Slice) {
+                if (ptr.child == u8) return try alloc.dupe(u8, v.asString()) orelse error.TypeMismatch;
+                const src_arr = if (v == .array) v.array orelse error.TypeMismatch;
+                const dest = try alloc.dupe(ptr.child, src_arr.len);
+                for (dest, src_arr) |*d, s| {
+                    d.* = try bindValue(ptr.child, alloc, s);
+                }
+                return dest;
+            }
+        },
+        .Struct => |s| {
+            if (v != .object) return error.TypeMismatch;
+            var res: T = undefined;
+            inline for (s.fields) |f| {
+                if (v.get(f.name)) |fv| {
+                    @field(res, f.name) = try bindValue(f.type, alloc, fv);
+                } else if (f.default_value) |ptr| {
+                    @field(res, f.name) = @as(*const f.type, @ptrCast(ptr)).*;
+                } else return error.MissingField;
+            }
+            return res;
+        },
+        .Enum => {
+            const name = v.asString() orelse return error.TypeMismatch;
+            return std.meta.stringToEnum(T, name) orelse return error.InvalidEnum;
+        },
+        else => @compileError("Unsupported type: " ++ @typeName(T)),
+    }
 }
 
 const max_depth = 256;
@@ -638,6 +726,41 @@ fn writeDjsonValue(value: Value, w: *Writer, opts: DjsonOptions, depth: usize) W
             try writeIndent(w, opts, depth);
             try w.writeByte('}');
         },
+    }
+}
+
+/// Directly convert any Zig value to DJSON format without intermediate `Value` nodes.
+pub fn stringify(value: anytype, writer: anytype, opts: DjsonOptions) !void {
+    const T = @TypeOf(value);
+    const info = @typeInfo(T);
+
+    switch (info) {
+        .Null => try writer.writeAll("null"),
+        .Bool => try writer.writeAll(if (value) "true" else "false"),
+        .Int, .ComptimeInt => try writer.print("{d}", .{value}),
+        .Float, .ComptimeFloat => try writer.print("{d}.0", .{value}),
+        .Pointer => |ptr| {
+            if (ptr.size == .Slice and ptr.child == u8) {
+                try writer.writeAll("\"{s}\"", .{value});
+            } else if (ptr.size == .Slice) {
+                try writer.writeAll("[");
+                for (value, 0..) |item, i| {
+                    if (i > 0) try writer.writeAll(", ");
+                    try stringify(item, writer, opts);
+                }
+                try writer.writeAll("]");
+            }
+        },
+        .Struct => |s| {
+            try writer.writeAll("{");
+            inline for (s.fields, 0..) |f, i| {
+                if (i > 0) try writer.writeAll(", ");
+                try writer.print(".{s} = ", .{f.name});
+                try stringify(@field(value, f.name), writer, opts);
+            }
+            try writer.writeAll("}");
+        },
+        else => try writer.print("\"{any}\"", .{value}),
     }
 }
 
