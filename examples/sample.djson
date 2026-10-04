@@ -28,4 +28,9 @@
     quoted = "needs, commas and {braces}"
     zip_code = "02134"
     color = "#ff8800"
+
+    # The SQL will now be in doc.root.get("$items")
+    """
+        SELECT * from users
+    """
 }

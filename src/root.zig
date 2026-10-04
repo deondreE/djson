@@ -214,7 +214,7 @@ const Parser = struct {
         if (std.mem.startsWith(u8, p.src, "\xEF\xBB\xBF")) p.pos = 3; // BOM
 
         p.skipTrivia(true);
-        if (p.pos < p.src.len and (p.src[p.pos] == '{' or p.src[p.pos] == '[')) {
+        if (p.pos < p.src.len and (p.src[p.pos] == '{' or p.src[p.pos] == '[') or std.mem.startsWith(u8, p.src, "\"\"\"")) {
             // A file that start with a bracket is exctly one value.
             const v = try p.parseValue();
             p.skipTrivia(true);
@@ -316,21 +316,33 @@ const Parser = struct {
 
             switch (item) {
                 .keyed => |e| {
-                    if (forced_array) return p.fail(item_pos, "arrays cannot contain `key = value` entries");
-                    if (items.items.len > 0) return p.fail(item_pos, "cannot mix keyed and bare entries");
+                    // if (forced_array) return p.fail(item_pos, "arrays cannot contain `key = value` entries");
+                    // if (items.items.len > 0) return p.fail(item_pos, "cannot mix keyed and bare entries");
                     const gop = try keys.getOrPut(p.arena, e.key);
                     if (gop.found_existing) return p.fail(item_pos, "duplicate key: ");
                     try entries.append(p.arena, e);
                 },
                 .bare => |v| {
-                    if (entries.items.len > 0) return p.fail(item_pos, "expected `key = value` entry, found a bare value");
+                    // if (entries.items.len > 0) return p.fail(item_pos, "expected `key = value` entry, found a bare value");
                     try items.append(p.arena, v);
                 },
             }
         }
+        _ = forced_array;
 
-        if (forced_array or items.items.len > 0) return .{ .array = try items.toOwnedSlice(p.arena) };
-        return .{ .object = try entries.toOwnedSlice(p.arena) };
+        // If there are ONLY items, it's an array.
+        // If there are ANY entries, it's an object.
+        // We can store bare items in a special hidden field if we want to preserve them.
+        if (entries.items.len > 0) {
+            if (items.items.len > 0) {
+                try entries.append(p.arena, .{
+                    .key = "$items",
+                    .value = .{ .array = try items.toOwnedSlice(p.arena) },
+                });
+            }
+            return .{ .object = try entries.toOwnedSlice(p.arena) };
+        }
+        return .{ .array = try items.toOwnedSlice(p.arena) };
     }
 
     fn parseItem(p: *Parser) Error!Item {
@@ -465,6 +477,29 @@ const Parser = struct {
     fn parseString(p: *Parser) Error![]u8 {
         const src = p.src;
         const start = p.pos;
+
+        // tripple quote case
+        if (std.mem.startsWith(u8, src[p.pos..], "\"\"\"")) {
+            p.pos += 3;
+            // Skip the intermediate newline if the string starts with one.
+            if (p.pos < src.len and src[p.pos] == '\n') {
+                p.pos += 1;
+            } else if (p.pos + 1 < src.len and src[p.pos] == '\r' and src[p.pos + 1] == '\n') {
+                p.pos += 2;
+            }
+
+            const content_start = p.pos;
+            while (p.pos + 2 < src.len) {
+                if (std.mem.startsWith(u8, src[p.pos..], "\"\"\"")) {
+                    const raw_text = src[content_start..p.pos];
+                    p.pos += 3;
+                    return p.dedent(raw_text);
+                }
+                p.pos += 1;
+            }
+            return p.fail(start, "unterminated triple-quoted string");
+        }
+
         p.pos += 1;
         var buf: std.ArrayList(u8) = .empty;
         while (true) {
@@ -517,6 +552,44 @@ const Parser = struct {
                 },
             }
         }
+    }
+
+    /// Strips the indentation of the last line from all preceding lines.
+    fn dedent(p: *Parser, text: []const u8) ![]u8 {
+        if (text.len == 0) return p.arena.dupe(u8, "");
+
+        var last_newline_idx: ?usize = null;
+        var i: usize = text.len;
+        while (i > 0) {
+            i -= 1;
+            if (text[i] == '\n') {
+                last_newline_idx = i;
+                break;
+            }
+        }
+
+        const margin = if (last_newline_idx) |idx| text[idx + 1 ..] else "";
+        // If the margin contains non-whitespace, it's not a valid margin; return raw.
+        for (margin) |c| if (!isWS(c)) return p.arena.dupe(u8, text);
+
+        var res: std.ArrayList(u8) = .empty;
+        var it = std.mem.splitScalar(u8, text, '\n');
+        var first = true;
+
+        while (it.next()) |line| {
+            if (it.rest().len == 0) break;
+
+            if (!first) try res.append(p.arena, '\n');
+            first = false;
+
+            if (std.mem.startsWith(u8, line, margin)) {
+                try res.appendSlice(p.arena, line[margin.len..]);
+            } else {
+                try res.appendSlice(p.arena, std.mem.trim(u8, line, " \t"));
+            }
+        }
+
+        return res.toOwnedSlice(p.arena);
     }
 
     fn parseHex4(p: *Parser, esc_pos: usize) Error!u21 {
@@ -694,7 +767,23 @@ fn writeDjsonValue(value: Value, w: *Writer, opts: DjsonOptions, depth: usize) W
         .bool => |b| try w.writeAll(if (b) "true" else "false"),
         .int => |i| try w.print("{d}", .{i}),
         .float => |f| try writeFloat(w, f, false),
-        .string => |s| if (needsQuotedValue(s)) try writeQuoted(w, s) else try w.writeAll(s),
+        .string => |s| {
+            if (std.mem.indexOfScalar(u8, s, '\n') != null) {
+                try w.writeAll("\"\"\"\n");
+                var it = std.mem.splitScalar(u8, s, '\n');
+                while (it.next()) |line| {
+                    try writeIndent(w, opts, depth + 1);
+                    try w.writeAll(line);
+                    try w.writeByte('\n');
+                }
+                try writeIndent(w, opts, depth + 1);
+                try w.writeAll("\"\"\"");
+            } else if (needsQuotedValue(s)) {
+                try writeQuoted(w, s);
+            } else {
+                try w.writeAll(s);
+            }
+        },
         .array => |items| {
             if (items.len == 0) return w.writeAll("[]");
             var all_scalar = true;
@@ -741,7 +830,19 @@ pub fn stringify(value: anytype, writer: anytype, opts: DjsonOptions) !void {
         .Float, .ComptimeFloat => try writer.print("{d}.0", .{value}),
         .Pointer => |ptr| {
             if (ptr.size == .Slice and ptr.child == u8) {
-                try writer.writeAll("\"{s}\"", .{value});
+                if (std.mem.indexOfScalar(u8, value, '\n') != null) {
+                    try writer.writeAll("\"\"\"\n");
+                    var it = std.mem.splitScalar(u8, value, '\n');
+                    while (it.next()) |line| {
+                        try writer.writeByteNTimes(' ', opts.indent); // Use opts.indent for margin
+                        try writer.writeAll(line);
+                        try writer.writeByte('\n');
+                    }
+                    try writer.writeByteNTimes(' ', opts.indent);
+                    try writer.writeAll("\"\"\"");
+                } else {
+                    try writeQuoted(writer, value);
+                }
             } else if (ptr.size == .Slice) {
                 try writer.writeAll("[");
                 for (value, 0..) |item, i| {
@@ -979,6 +1080,30 @@ test "djson output round-trips" {
     };
     defer doc2.deinit();
     try testing.expect(doc.root.eql(doc2.root));
+}
+
+test "djson outputs triple quotes for multi-line strings" {
+    const gpa = testing.allocator;
+    const content = "SELECT *\nFROM users";
+    const val = Value{ .string = content };
+
+    var aw: Writer.Allocating = .init(gpa);
+    defer aw.deinit();
+
+    try writeDjsonValue(val, &aw.writer, .{}, 0);
+
+    const expected =
+        \\"""
+        \\    SELECT *
+        \\    FROM users
+        \\    """
+    ;
+    try testing.expectEqualStrings(expected, aw.written());
+
+    // Round-trip check
+    var doc = try parse(gpa, aw.written(), null);
+    defer doc.deinit();
+    try testing.expectEqualStrings(content, doc.root.string);
 }
 
 test "get" {

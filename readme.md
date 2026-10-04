@@ -3,7 +3,7 @@
 
 ### Language
 - [ ] Make every valid JSON file valid djson (`{"a":1}` currently fails because `:` only separates a key when followed by whitespace, a bracket or a quote)
-- [ ] Multi-line and raw strings (`"""..."""` or backtick blocks)
+- [x] Multi-line and raw strings (`"""..."""` or backtick blocks)
 - [ ] More number forms: hex/binary/octal literals, `_` separators, `u64` range
 - [ ] Lone scalar documents (today `42` parses as `[42]`)
 - [ ] Decide the duplicate-key policy: error (current), last-wins, or merge
