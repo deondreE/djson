@@ -6,7 +6,7 @@
 - [x] Multi-line and raw strings (`"""..."""` or backtick blocks)
 - [x] More number forms: hex/binary/octal literals, `_` separators, `u64` range
 - [ ] Lone scalar documents (today `42` parses as `[42]`)
-- [ ] Decide the duplicate-key policy: error (current), last-wins, or merge
+- [x] Decide the duplicate-key policy: error (current), last-wins, or merge
 - [x] Write the formal grammar (EBNF) and a short spec document
 
 ### Parser

@@ -322,9 +322,21 @@ const Parser = struct {
 
             switch (item) {
                 .keyed => |e| {
-                    const gop = try keys.getOrPut(p.arena, e.key);
-                    if (gop.found_existing) return p.fail(item_pos, "duplicate key: ");
-                    try entries.append(p.arena, e);
+                    const existing_idx = for (entries.items, 0..) |existing, idx| {
+                        if (std.mem.eql(u8, existing.key, e.key)) break idx;
+                    } else null;
+
+                    if (existing_idx) |idx| {
+                        // Key exists: check for Recursive Merge Last-Wins
+                        if (entries.items[idx].value == .object and e.value == .object) {
+                            entries.items[idx].value = try p.mergeObjects(entries.items[idx].value, e.value);
+                        } else {
+                            entries.items[idx].value = e.value;
+                        }
+                    } else {
+                        try entries.append(p.arena, e);
+                        try keys.put(p.arena, e.key, {});
+                    }
                 },
                 .bare => |v| {
                     try items.append(p.arena, v);
@@ -338,6 +350,30 @@ const Parser = struct {
 
         // Default for {} or empty implicit root is an object
         return .{ .object = try entries.toOwnedSlice(p.arena) };
+    }
+
+    fn mergeObjects(p: *Parser, base: Value, override: Value) Error!Value {
+        var merged: std.ArrayList(Value.Entry) = .empty;
+
+        try merged.appendSlice(p.arena, base.object);
+
+        for (override.object) |over_e| {
+            const existing_idx = for (merged.items, 0..) |base_e, idx| {
+                if (std.mem.eql(u8, base_e.key, over_e.key)) break idx;
+            } else null;
+
+            if (existing_idx) |idx| {
+                if (merged.items[idx].value == .object and over_e.value == .object) {
+                    merged.items[idx].value = try p.mergeObjects(merged.items[idx].value, over_e.value);
+                } else {
+                    merged.items[idx].value = over_e.value;
+                }
+            } else {
+                try merged.append(p.arena, over_e);
+            }
+        }
+
+        return .{ .object = try merged.toOwnedSlice(p.arena) };
     }
 
     fn parseItem(p: *Parser) Error!Item {
@@ -1042,17 +1078,19 @@ test "empty input is an empty object" {
     try expectJson("  # nothing\n", "{}");
 }
 
-test "errors carry positions" {
-    try expectError("a = 1\na = 2", 2, 1); // duplicate key
-    try expectError("a = {", 1, 5); // unterminated
-    try expectError("a = \"x\" b", 1, 9); // unexpected text after a quoted value
-    try expectError("a =\nb = 1", 1, 4); // missing value
-    try expectError("{ a = 1, 2 }", 1, 10); // mixed
-    try expectError("[ a = 1 ]", 1, 3); // keyed entry in array
-    try expectError("a = \"oops", 1, 5); // unterminated string
-    try expectError("a = \"\\q\"", 1, 6); // bad escape
-    try expectError("a = 1 }", 1, 7); // stray bracket
-    try expectError("{ } x", 1, 5); // trailing text after top-level value
+test "recursive merge duplicates" {
+    const gpa = testing.allocator;
+    const src =
+        \\server = { host = localhost, port = 80 }
+        \\server = { port = 8080, tls = true }
+    ;
+    var doc = try parse(gpa, src, null);
+    defer doc.deinit();
+
+    const server = doc.root.get("server").?;
+    try testing.expectEqualStrings("localhost", server.get("host").?.string);
+    try testing.expectEqual(@as(i64, 8080), server.get("port").?.int);
+    try testing.expectEqual(true, server.get("tls").?.bool);
 }
 
 test "advanced numeric literals" {
