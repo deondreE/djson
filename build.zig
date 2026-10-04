@@ -29,7 +29,7 @@ pub fn build(b: *std.Build) void {
     const wasm_lib = b.addExecutable(.{
         .name = "djson",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/capi.zig"),
+            .root_source_file = b.path("src/wasm.zig"),
             .target = wasmTarget,
             .optimize = .ReleaseSmall,
             .imports = &.{
