@@ -1,0 +1,13 @@
+.{
+    .name = .djson,
+    .version = "0.1.0",
+    .fingerprint = 0x8d1e0cff1e25678e, // Changing this has security and trust implications.
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "readme.md",
+        "LICENSE",
+    },
+}

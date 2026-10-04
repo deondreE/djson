@@ -1,0 +1,30 @@
+{
+    structure_name: {
+        .test = {
+            .test = {
+
+            }
+        },
+        .initial_thing = "test",
+    }
+
+    server = {
+        host = localhost,
+        port: 8080,
+        tls = fasle,
+        motd = Hello there world,
+        timeout = 2.5
+    }
+
+    tags = {alpha, beta, gamma}
+    prots = [80, 443]
+
+    points = {
+        .{ .x = 1, .y = 2 },
+        .{ .x = 3, .y = 4 },  
+    }
+
+    quoted = "needs, commas and {braces}"
+    zip_code = "02134"
+    color = "#ff8800"
+}
