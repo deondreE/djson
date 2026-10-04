@@ -13,12 +13,11 @@
 - [ ] Source spans (line, column) on every `Value`, so consumers can report their own errors
 - [ ] Collect multiple errors instead of stopping at the first
 - [ ] Error output with the source line and a caret under the problem
-- [ ] Configurable limits (max depth, max input size, max string length)
+- [x] Configurable limits (max depth, max input size, max string length)
 - [ ] Streaming or incremental parsing for very large files
 - [ ] Fuzz testing with `std.testing.fuzz`, plus parse/format round-trip property tests
 
 ### Serializer
-- [ ] Formatter that preserves comments (`writeDjson` currently drops them)
 - [ ] Options: sort keys, always-quote strings, single-line arrays, line-width wrapping
 - [ ] Streaming writer API that doesn't need a full `Value` tree (MAYBE)
 
@@ -40,5 +39,5 @@
 - [ ] Benchmarks against `std.json` on large files
 - [ ] More tests: Windows `\r\n` input, BOM, very large documents, invalid UTF-8
 - [ ] Docs site or generated API docs (`zig build docs`)
-- [ ] LICENSE, CHANGELOG, CONTRIBUTING
+- [x] LICENSE, CHANGELOG, CONTRIBUTING
 - [ ] Clean-up: remove the unused `Io` import in `root.zig`, make `writeNewline` private, fix comment typos

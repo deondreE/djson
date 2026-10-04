@@ -1,0 +1,127 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "DJSON",
+	"scopeName": "source.djson",
+	"patterns": [
+		{
+			"include": "#keywords"
+		},
+		{
+			"include": "#entry"
+		},
+		{
+			"include": "#value"
+		}
+	],
+	"repository": {
+		"comments": {
+			"patterns": [
+				{
+					"name": "comment.line.djson",
+					"match": "(//|#).*$"
+				}
+			]
+		},
+		"entry": {
+			"patterns": [
+				{
+					"name": "meta.entry.djson",
+					"match": "(\\.)?([a-zA-Z0-9_-]+|\\\"[^\\\"]*\\\")\\s*(=|:(?=\\s|\\\"|\\{|\\[))",
+					"captures": {
+						"1": {
+							"name": "punctuation.definition.key.djson"
+						},
+						"2": {
+							"name": "entity.name.tag.djson"
+						},
+						"3": {
+							"name": "keyword.operator.assignment.djson"
+						}
+					}
+				}
+			]
+		},
+		"value": {
+			"patterns": [
+				{
+					"include": "#constant"
+				},
+				{
+					"include": "#number"
+				},
+				{
+					"include": "#string"
+				},
+				{
+					"include": "#string"
+				},
+				{
+					"include": "#container"
+				}
+			]
+		},
+		"constant": {
+			"patterns": [
+				{
+					"name": "constant.language.djson",
+					"match": "\\b(true|false|null)\\b"
+				}
+			]
+		},
+		"number": {
+			"patterns": [
+				{
+					"name": "constant.numeric.djson",
+					"match": "(?x) ([-+])? ( 0[xX][0-9a-fA-F_]+ | 0[bB][01_]+ | 0[oO][0-7_]+ | [1-9][0-9_]*(\\.[0-9_]+)?([eE][+-]?[0-9_]+)? | 0(\\.[0-9_]+)?([eE][+-]?[0-9_]+)? )"
+				}
+			]
+		},
+		"string": {
+			"patterns": [
+				{
+					"name": "string.quoted.double.djson",
+					"begin": "\"",
+					"end": "\"",
+					"patterns": [
+						{
+							"name": "constant.character.escape.djson",
+							"match": "\\\\u[0-9a-fA-F]{4}"
+						},
+						{
+							"name": "constant.character.escape.djson",
+							"match": "\\\\."
+						}
+					]
+				},
+				{
+					"name": "string.unquoted.djson",
+					"match": "[^\\s,=\\[\\]{}#\\/:]+"
+				}
+			]
+		},
+		"container": {
+			"patterns": [
+				{
+					"name": "meta.structure.container.djson",
+					"begin": "[\\{\\[]",
+					"beginCaptures": {
+						"0": {
+							"name": "punctuation.definition.container.begin.djson"
+						}
+					},
+					"end": "[\\}\\]]",
+					"endCaptures": {
+						"0": {
+							"name": "punctuation.definition.container.end.djson"
+						}
+					},
+					"patterns": [
+						{
+							"include": "$self"
+						}
+					]
+				}
+			]
+		}
+	}
+}

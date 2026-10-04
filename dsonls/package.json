@@ -1,0 +1,25 @@
+{
+  "name": "dsonls",
+  "displayName": "dsonls",
+  "description": "fast json runtime",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.140.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "djson",
+      "aliases": ["djson", "djson"],
+      "extensions": [".djson"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "djson",
+      "scopeName": "source.djson",
+      "path": "./syntaxes/djson.tmLanguage.json"
+    }]
+  }
+}

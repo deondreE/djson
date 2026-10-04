@@ -91,7 +91,7 @@ pub const Diagnostic = struct {
     message: []const u8 = "",
 };
 
-pub const ParseError = error{ SyntaxError, OutOfMemory };
+pub const ParseError = error{ SyntaxError, ProcessError, OutOfMemory };
 
 /// A parsed document. All memory (including strings) is owned by `arena`,
 /// so the source text does not need to outlive it.
@@ -104,8 +104,18 @@ pub const Document = struct {
     }
 };
 
-/// Parses `source`. On `error.SyntaxError`, `diag` (if given) is filled in.
-pub fn parse(gpa: Allocator, source: []const u8, diag: ?*Diagnostic) ParseError!Document {
+pub const ParseOptions = struct {
+    max_depth: u32 = 256,
+    max_input_size: usize = 10 * 1024 * 1024,
+    max_string_length: usize = 1 * 1024 * 1024,
+};
+
+pub fn parseWithOptions(gpa: Allocator, source: []const u8, diag: ?*Diagnostic, options: ParseOptions) ParseError!Document {
+    if (source.len > options.max_input_size) {
+        if (diag) |d| d.* = .{ .message = "input exceeds maximum allowed size" };
+        return error.ProcessError;
+    }
+
     var arena = std.heap.ArenaAllocator.init(gpa);
     errdefer arena.deinit();
 
@@ -113,9 +123,15 @@ pub fn parse(gpa: Allocator, source: []const u8, diag: ?*Diagnostic) ParseError!
         .src = source,
         .arena = arena.allocator(),
         .diag = diag,
+        .options = options,
     };
     const root = try p.parseDocument();
     return .{ .arena = arena, .root = root };
+}
+
+/// Parses `source`. On `error.SyntaxError`, `diag` (if given) is filled in.
+pub fn parse(gpa: Allocator, source: []const u8, diag: ?*Diagnostic) ParseError!Document {
+    return parseWithOptions(gpa, source, diag, .{});
 }
 
 /// This maps DJSON directly to Zig structs. It handles slices and optional values.
@@ -183,6 +199,7 @@ const Parser = struct {
     arena: Allocator,
     diag: ?*Diagnostic,
     depth: u32 = 0,
+    options: ParseOptions,
 
     const Error = ParseError;
     const Entry = Value.Entry;
@@ -474,9 +491,12 @@ const Parser = struct {
     fn parseContainer(p: *Parser, close: u8, forced_array: bool) Error!Value {
         const open_pos = p.pos;
         p.pos += 1;
+
         p.depth += 1;
         defer p.depth -= 1;
-        if (p.depth > max_depth) return p.fail(open_pos, "nesting is too deep -- really you have a problem.");
+
+        if (p.depth > p.options.max_depth) return p.fail(open_pos, "nesting is too deep -- really you have a problem.");
+
         return p.parseBody(close, forced_array, open_pos);
     }
 
