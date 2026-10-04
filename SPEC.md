@@ -48,6 +48,10 @@ a quote, or a bracket (to allow string like `12:00` to remain unquoted).
 
 - **Keywords**: `true`, `false`, `null`.
 - **Numbers**: Standard decimal notation. Leading zeros (eg. `007`) are treated as Ids.
+    - **Decimal**: `1234`, `1_000_000`.
+    - **Hex/Bin/Oct**: `0xFF`, `0b1010`, `0o77`.
+    - **Underscore**: `_` is permitted as a visual separator in any numeric type.
+    - **Leading Zeros**: `007` is treated as a String (ID protection).
 - **Unquoted Strings**: Characters until a separator, newline, or comment, Leading/trailing whitespace is trimmed.
 - **Quoted Strings**: Surrounded by `"`. Supports standard JSON escapes: `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, and `\uXXXX` (including surrogate pairs).
 
@@ -76,28 +80,42 @@ When a value is not quoted, it is classified in the following priority:
 ```ebnf
 document = [ white_space ] , ( explicit_value | body ) , [ white_space ] ;
 
-body = array_body | object_body ;
+body = { entry | bare_value } ;
 
 value = scalar | container ;
-salar = string | number | boolean | "null" ;
+scalar = string | number | boolean | "null" ;
 container = array | object ;
 
-object = "{" , [ white_space ], [ object_body ] , [ white_space ] , "}" ;
+object = "{" , [ white_space ], [ body ] , [ white_space ] , "}" ;
 entry = [ "." ] , key , [ white_space ] , separator , [ white_space ] , value ;
-key = indentifier | quoted_string ;
+key = identifier | quoted_string ;
 separator = "=" | ":" ;
 
-array = "[" , [ white_space ] , [ array_body ] , [ white_space ] , "]" | "{" , [ white_space ] , [ array_body ] , [ white_space ] , "}" ;
+array = "[" , [ white_space ] , [ body ] , [ white_space ] , "]" 
+      | "{" , [ white_space ] , [ body ] , [ white_space ] , "}" ;
 
-indentifier = { character - ( separator | "," | "[" | "]" | "{" | "}" | "#" | "/" | white_space ) } ; 
+bare_value = value ;
 
-number = [ "-" | "+" ] , digit , { digit } , [ "." , { digit } ] , [ exponent ] ;
-exponent = ( "e" | "E" ) , [ "-", "+" ] , digit , { digit } ; 
+identifier = { character - ( separator | "," | "[" | "]" | "{" | "}" | "#" | "/" | white_space ) } ; 
 
-boolean = "true" | "false" ;
-white_space = { "" | "\t" | "\n" | "\r" | comment }
-comment = ( "#" | "//" ), { character - "\n" } , "\n" ;
-hex_digit       = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "a" | "b" | "c" | "d" | "e" | "f" ;
-digit           = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+number = [ "-" | "+" ] , ( hex_lit | bin_lit | oct_lit | dec_lit ) ;
+dec_lit = digit , { digit | "_" } , [ "." , { digit | "_" } ] , [ exponent ] ;
+hex_lit = "0" , ( "x" | "X" ) , hex_digit , { hex_digit | "_" } ;
+bin_lit = "0" , ( "b" | "B" ) , bin_digit , { bin_digit | "_" } ;
+oct_lit = "0" , ( "o" | "O" ) , oct_digit , { oct_digit | "_" } ;
+
+exponent = ( "e" | "E" ) , [ "-" | "+" ] , digit , { digit | "_" } ; 
+
+string = quoted_string | raw_string | identifier ;
+quoted_string = '"' , { character - '"' | escape_seq } , '"' ;
+raw_string = '"""' , { character } , '"""' ;
+
+white_space = { " " | "\t" | "\n" | "\r" | comment } ;
+comment = ( "#" | "//" ), { character - "\n" } , ( "\n" | ? EOF ? ) ;
+
+hex_digit = "0"..."9" | "a"..."f" | "A"..."F" ;
+bin_digit = "0" | "1" ;
+oct_digit = "0"..."7" ;
+digit     = "0"..."9" ;
 character = ? all unicode characters ? ;
 ```

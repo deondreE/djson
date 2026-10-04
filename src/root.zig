@@ -612,30 +612,67 @@ pub fn classify(text: []const u8) Value {
     if (std.mem.eql(u8, text, "null")) return .null;
 
     if (looksNumeric(text)) {
-        if (std.fmt.parseInt(i64, text, 10)) |i| {
-            return .{ .int = i };
+        if (parseFlexibleInt(text)) |val| {
+            return .{ .int = val };
         } else |_| {}
-        if (std.fmt.parseFloat(f64, text)) |f| {
+
+        // try float (strip underscores first)
+        var buf: [128]u8 = undefined;
+        var i: usize = 0;
+        for (text) |c| {
+            if (c != '_') {
+                buf[i] = c;
+                i += 1;
+            }
+            if (i >= 127) break;
+        }
+        if (std.fmt.parseFloat(f64, buf[0..i])) |f| {
             if (std.math.isFinite(f)) return .{ .float = f };
         } else |_| {}
     }
     return .{ .string = text };
 }
 
+fn parseFlexibleInt(text: []const u8) !i64 {
+    var buf: [128]u8 = undefined;
+    if (text.len >= buf.len) return error.InvalidCharacter;
+
+    var i: usize = 0;
+    for (text) |c| {
+        if (c != '_') {
+            buf[i] = c;
+            i += 1;
+        }
+    }
+    const clean = buf[0..i];
+    return std.fmt.parseInt(i64, clean, 0);
+}
+
 fn looksNumeric(text: []const u8) bool {
     if (text.len == 0) return false;
+    var rest = text;
+    if (rest[0] == '+' or rest[0] == '-') rest = rest[1..];
+    if (rest.len == 0) return false;
+
+    // check for prefixs
+    if (rest.len > 2 and rest[0] == '0') {
+        switch (rest[1]) {
+            'x', 'b', 'o', 'X', 'B', 'O' => return true,
+            else => {},
+        }
+    }
+
     var has_digit = false;
-    for (text) |c| {
+    for (rest) |c| {
         switch (c) {
             '0'...'9' => has_digit = true,
-            '+', '-', '.', 'e', 'E' => {},
+            '+', '-', '.', 'e', 'E', '_' => {},
             else => return false,
         }
     }
     if (!has_digit) return false;
-    // Leading zeros ("007", "-01") are IDs not numbers.
-    var rest = text;
-    if (rest[0] == '+' or rest[0] == '-') rest = rest[1..];
+
+    // ID protection: "007" is a string, but "0" is a number.
     if (rest.len > 1 and rest[0] == '0' and std.ascii.isDigit(rest[1])) return false;
     return true;
 }
@@ -1021,6 +1058,15 @@ test "errors carry positions" {
     try expectError("a = \"\\q\"", 1, 6); // bad escape
     try expectError("a = 1 }", 1, 7); // stray bracket
     try expectError("{ } x", 1, 5); // trailing text after top-level value
+}
+
+test "advanced numeric literals" {
+    try expectJson("hex = 0xFF", "{\"hex\":255}");
+    try expectJson("bin = 0b1010", "{\"bin\":10}");
+    try expectJson("oct = 0o77", "{\"oct\":63}");
+    try expectJson("large = 1_000_000", "{\"large\":1000000}");
+    try expectJson("float_sep = 1_000.50", "{\"float_sep\":1000.5}");
+    try expectJson("neg_hex = -0x01", "{\"neg_hex\":-1}");
 }
 
 test "depth limit" {
