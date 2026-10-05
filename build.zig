@@ -46,6 +46,26 @@ pub fn build(b: *std.Build) void {
     const wasm_step = b.step("wasm", "Build the WASM library");
     wasm_step.dependOn(&install_wasm.step);
 
+    const bridge_lib = b.addLibrary(.{
+        .name = "djson",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/bridge.zig"),
+            .target = target,
+            .optimize = .ReleaseSmall,
+            .imports = &.{
+                .{ .name = "djson", .module = mod },
+            },
+        }),
+    });
+    bridge_lib.root_module.link_libc = true;
+    const install_bridge = b.addInstallArtifact(bridge_lib, .{
+        .dest_dir = .{ .override = .{ .custom = "../djson_rust/djson_lib" } },
+    });
+
+    const bridge_step = b.step("bridge", "Build the C-Bridge for the other langs to work properly.");
+    bridge_step.dependOn(&install_bridge.step);
+
     const run_step = b.step("run", "Run the app");
 
     const run_cmd = b.addRunArtifact(exe);

@@ -1,0 +1,17 @@
+# Contributing
+
+Thank you for you interesting in DJSON. To maintain the integrity of the specification, and the quality of the code please follow these guidelines.
+
+## How to Contribute
+
+### 1. Specification Proposals
+If you wish to suggest changes or clarifications to the DJSON language specification:
+- **Open an Issue**: Use the title prefix `[Spec]` followed by a concise description.
+- **Provide Context**: Clearly explain rational behind change.
+
+### 2. Code Contributions
+We welcome pull requests anytime.
+
+### Code of Conduct
+
+Be respectful. understand different tasks take more time then others.

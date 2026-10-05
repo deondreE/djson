@@ -82,6 +82,24 @@ pub const Value = union(enum) {
     pub fn asString(self: Value) ?[]const u8 {
         return if (self == .string) self.string else null;
     }
+
+    pub fn keys(self: Value, allocator: std.mem.Allocator) ![][]const u8 {
+        if (self != .object) return error.NotAnObject;
+        const result = try allocator.alloc([]const u8, self.object.len);
+        for (self.object, 0..) |entry, i| {
+            result[i] = entry.key;
+        }
+        return result;
+    }
+
+    pub fn values(self: Value, allocator: std.mem.Allocator) ![]Value {
+        if (self != .object) return error.NotAnObject;
+        const result = try allocator.alloc(Value, self.object.len);
+        for (self.object, 0..) |entry, i| {
+            result[i] = entry.value;
+        }
+        return result;
+    }
 };
 
 /// Where and why parsing failed. `line` and `column` are 1-based.

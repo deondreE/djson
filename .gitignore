@@ -6,3 +6,5 @@ dist
 *.wasm
 *.d.ts
 *.js
+target
+*.lib
