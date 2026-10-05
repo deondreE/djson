@@ -109,6 +109,7 @@ pub fn main(init: std.process.Init) !void {
             std.process.exit(1);
         },
         error.OutOfMemory => die("out of memory", .{}),
+        error.ProcessError => die("ProcessError", .{}),
     };
     defer doc.deinit();
 
